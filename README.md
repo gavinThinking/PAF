@@ -108,3 +108,30 @@ SELECT
         ELSE 'UNHEALTHY'
     END AS standby_health
 FROM pg_stat_wal_receiver;
+
+```
+SELECT
+    pid,
+    status,
+    receive_start_lsn,
+    flushed_lsn,
+    latest_end_lsn,
+    pg_wal_lsn_diff(latest_end_lsn, flushed_lsn) AS byte_lag,
+    last_msg_send_time,
+    last_msg_receipt_time,
+    now() - last_msg_receipt_time AS last_msg_delay,
+    pg_last_wal_replay_lsn() AS last_replay_lsn,
+    pg_last_xact_replay_timestamp() AS last_replay_ts,
+    now() - pg_last_xact_replay_timestamp() AS replay_delay,
+    CASE
+        WHEN status = 'streaming'
+         AND pg_last_wal_replay_lsn() IS NOT NULL
+         AND pg_last_xact_replay_timestamp() IS NOT NULL
+         AND (now() - last_msg_receipt_time) < interval '30 seconds'
+         AND pg_wal_lsn_diff(latest_end_lsn, flushed_lsn) < 16*1024*1024  -- 16 MB threshold
+         AND (now() - pg_last_xact_replay_timestamp()) < interval '30 seconds'
+        THEN 'HEALTHY'
+        ELSE 'UNHEALTHY'
+    END AS standby_health
+FROM pg_stat_wal_receiver;
+```
